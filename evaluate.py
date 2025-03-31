@@ -117,7 +117,7 @@ def acf_score_annealed(path_hist, paths_gen, weight):
 
 
 def marginal_distribution_score(path_hist, paths_gen):
-    """ Use Scott's choice to determine width: 3.5\sigma^2 n^(-1/3) = 0.01 """
+    r""" Use Scott's choice to determine width: 3.5\sigma^2 n^(-1/3) = 0.01 """
     width = 0.01
     scores = []
     for i in range(paths_gen.shape[1]):
@@ -173,7 +173,7 @@ def estimate_hurst(data, name, method):
     return out
 
 def print_error(list):
-    out = f'& {list[0]:.3f} $\pm$ {list[1]:.3f}' 
+    out = f'& {list[0]:.3f} $\\pm$ {list[1]:.3f}' 
     return out
 
 

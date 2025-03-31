@@ -43,13 +43,14 @@ DICT_DATANAME_fOU = ['fOU_H0.7']
 #DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp']
 DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME = ['NileMin']
-DICT_DATANAME = ['ethernet']
+#DICT_DATANAME = ['ethernet']
 #DICT_DATANAME = DICT_DATANAME_OTHER
-#DICT_DATANAME = DICT_DATANAME_STOCK + DICT_DATANAME_fOU + DICT_DATANAME_OTHER
+DICT_DATANAME = DICT_DATANAME_STOCK + DICT_DATANAME_fOU + DICT_DATANAME_OTHER
 
 #DICT_METHOD = ['fSDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE']
-DICT_METHOD = ['ArmaSDE']
+#DICT_METHOD = ['ArmaSDE']
+DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE']
 
 #ts_points = ['2010/1/4', '2020/12/31', '2021/11/11'] # train_start, train_end=test_start, test_end 
 #ts_points = ['1986/4/10', '2015/12/31', '2021/11/11'] 
