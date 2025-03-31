@@ -18,11 +18,13 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from data.data import get_stock_data, get_fOU_data, get_other_data
-from utils.neural_net import LatentFSDEfunc, LatentODEfunc, GeneratorRNN, LatentArmaSDEfunc
+from utils.neural_net import LatentFSDEfunc, LatentODEfunc, GeneratorRNN, LatentArmaSDEfunc, ArmaSDE
 from utils.neural_net import LatentSDEfunc, latent_dim, batch_dim, nhidden_rnn
 from utils.utils import RunningAverageMeter, log_normal_pdf, normal_kl, calculate_log_likelihood
 from utils.plots import plot_generated_paths, plot_original_path, plot_hist
 from utils.utils import save_csv, tensor_to_numpy
+
+#from utils.armasde_solver import p, theta
 
 #sys.setrecursionlimit(10000)
 
@@ -38,10 +40,10 @@ parser.add_argument('--num_paths', type=int, default=10)
 args = parser.parse_args()
 
 DICT_DATANAME_STOCK = ["SPX", "TPX", "SX5E"]
-#DICT_DATANAME_fOU = ['fOU_H0.7', 'fOU_H0.8', 'fOU_H0.9']
-DICT_DATANAME_fOU = ['fOU_H0.7']
-#DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp']
-DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'NBSdiff', 'NhemiTemp']
+DICT_DATANAME_fOU = ['fOU_H0.7', 'fOU_H0.8', 'fOU_H0.9']
+#DICT_DATANAME_fOU = ['fOU_H0.7']
+DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp']
+#DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME = ['NileMin']
 #DICT_DATANAME = ['ethernet']
 #DICT_DATANAME = DICT_DATANAME_OTHER
@@ -49,8 +51,8 @@ DICT_DATANAME = DICT_DATANAME_STOCK + DICT_DATANAME_fOU + DICT_DATANAME_OTHER
 
 #DICT_METHOD = ['fSDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE']
-#DICT_METHOD = ['ArmaSDE']
-DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE']
+DICT_METHOD = ['ArmaSDE']
+#DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE']
 
 #ts_points = ['2010/1/4', '2020/12/31', '2021/11/11'] # train_start, train_end=test_start, test_end 
 #ts_points = ['1986/4/10', '2015/12/31', '2021/11/11'] 
@@ -74,7 +76,8 @@ from utils.armasde_solver import armasdeint
 
 
 def train(data_name, method):
- 
+    #global p, theta
+
     device = torch.device('cuda:' + str(args.gpu)
                           if torch.cuda.is_available() else 'cpu')
 
@@ -122,11 +125,23 @@ def train(data_name, method):
         params = (list(func_fSDE.parameters())) 
         #params = (list(fsdenet.parameters()))
     elif method == "ArmaSDE":
-        func_ArmaSDE = LatentArmaSDEfunc().to(device)
+        func_ArmaSDE = ArmaSDE().to(device)
         params = list(func_ArmaSDE.parameters())
+        """
+        p = torch.tensor(p, dtype=torch.float32, requires_grad=True)
+        theta = torch.tensor(theta, dtype=torch.float32, requires_grad=True)
+        params.append(p)
+        params.append(theta)
+        """
+
+    #print(params)
+    #print([type(p) for p in params])
 
     optimizer = optim.Adam(params, lr=args.lr)
     loss_meter = RunningAverageMeter()
+
+    for name, param in func_ArmaSDE.named_parameters():
+        print(f"{name}: requires_grad = {param.requires_grad}")
     
     for itr in range(1, args.niters + 1): #tqdm(range(1, args.niters + 1)):
         optimizer.zero_grad()
@@ -139,6 +154,8 @@ def train(data_name, method):
         #z0 = epsilon * torch.exp(.5 * qz0_logvar) + qz0_mean # dimension (batch_size, latent_size)
         #print(train_data.shape)
         z0 = torch.zeros(batch_dim, latent_dim) + train_data[0, 0]
+        #print("z0: {}".format(z0))
+        #print(z0.size())
         #print(z0.shape)
         
         if method == "RNN":
@@ -157,7 +174,13 @@ def train(data_name, method):
             # dimension of fsdeint is (batch_size, t_size, latent_size)
             pred_z = fsdeint(func_fSDE, args.hurst, z0, train_ts) #.permute(0, 2, 1)
         elif method == "ArmaSDE":
-            pred_z = armasdeint(func_ArmaSDE, z0, train_ts)
+            z_noise_state = torch.zeros(batch_dim, latent_dim)
+            z0 = torch.cat([z0,z_noise_state], dim=1)
+            pred_z = sdeint(func_ArmaSDE, z0, train_ts).permute(1, 0, 2)
+            #print("pred_z: {}".format(pred_z))
+            #print(pred_z.size())
+            pred_z = pred_z[:,:,:latent_dim]
+            #print("p: {:.4f}, theta: {:.4f}".format(p, theta))
         
         # compute loss
         #noise_std_ = torch.zeros(pred_x.size()).to(device) + noise_std
@@ -182,6 +205,17 @@ def train(data_name, method):
             loss += reg_lambda * reg
 
             loss.backward()
+
+            """
+            # p と theta の勾配を表示
+            if p.grad is not None:
+                print(f"Gradient of p: {p.grad}")
+            if theta.grad is not None:
+                print(f"Gradient of theta: {theta.grad}")
+            """
+            print("pgrad: {}, thetagrad: {}".format(func_ArmaSDE.p.grad, func_ArmaSDE.theta.grad))
+            print("p: {}, theta: {}".format(func_ArmaSDE.p, func_ArmaSDE.theta))
+            
             optimizer.step()
         
         #if itr%5==0:
@@ -217,7 +251,10 @@ def train(data_name, method):
         elif method == 'fSDE':
             xs_gen = fsdeint(func_fSDE, args.hurst, x0, ts_total)
         elif method == 'ArmaSDE':
-            xs_gen = armasdeint(func_ArmaSDE, x0, ts_total)
+            x_noise_state = torch.zeros(batch_dim, latent_dim)
+            x0 = torch.cat([x0,x_noise_state], dim=1)
+            xs_gen = sdeint(func_ArmaSDE, x0, ts_total).permute(1, 0, 2)
+            xs_gen = xs_gen[:,:,:latent_dim]
         
         plot_original_path(data_name, ts_total, data_total)
         plot_generated_paths(min([args.num_paths, batch_dim]), data_name, method, ts_total, data_total, xs_gen)

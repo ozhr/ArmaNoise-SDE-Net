@@ -40,24 +40,29 @@ def d_tanh(x):
     return 1 / (x.cosh() ** 2)
 """
 
-p = 0.0758+0.0696
-theta = 0.0696
+#p = 0.0758+0.0696
+#theta = 0.0696
 
+"""
 def l_func(u):
     numerator = 2 * theta * (p - theta)
     denominator = (2*p - theta)**2 * np.exp(2 * (p - theta) * u) - theta**2
     return theta * np.exp(p * u) * (1 - numerator / denominator)
-
+"""
+"""
 # 2次元のドリフト関数
 def drift(X, t):
     dX1 = - math.exp(-p*t) * X[1]  # X1のドリフト
     dX2 = 0  # X2のドリフト
     return np.array([dX1, dX2])
+"""
 
+"""
 # 2次元の拡散関数
 def diffusion(X, t):
     # 拡散項は状態ベクトルの次元に適した形にする
     return np.array([[1, 0], [0, l_func(t)]])
+"""
 
 # 初期値
 X0 = np.array([0.0, 0.0])
@@ -108,7 +113,7 @@ def armasdeint(func_armaSDE, y0, ts):
     for i in range(batch_size):
         #B = FBM(n=nsteps, hurst=hurst, length=t_end-t_start).fbm()
         # SDEの数値解
-        X = sdeint.itoint(drift, diffusion, X0, t)
+        X = sdeint.itoint(func_armaSDE.noise_drift, func_armaSDE.noise_diffusion, X0, t)
         B = X[:,0]
         dB = np.diff(B) if i==0 else np.append(dB, np.diff(B))
     dB = dB.reshape(batch_size, nsteps)
