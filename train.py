@@ -18,13 +18,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 from data.data import get_stock_data, get_fOU_data, get_other_data
-from utils.neural_net import LatentFSDEfunc, LatentODEfunc, GeneratorRNN, LatentArmaSDEfunc, ArmaSDE
+from utils.neural_net import LatentFSDEfunc, LatentODEfunc, GeneratorRNN, LatentArmaSDEfunc
 from utils.neural_net import LatentSDEfunc, latent_dim, batch_dim, nhidden_rnn
 from utils.utils import RunningAverageMeter, log_normal_pdf, normal_kl, calculate_log_likelihood
 from utils.plots import plot_generated_paths, plot_original_path, plot_hist
 from utils.utils import save_csv, tensor_to_numpy
-
-#from utils.armasde_solver import p, theta
 
 #sys.setrecursionlimit(10000)
 
@@ -46,13 +44,14 @@ DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp'
 #DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME = ['NileMin']
 #DICT_DATANAME = ['ethernet']
-#DICT_DATANAME = DICT_DATANAME_OTHER
-DICT_DATANAME = DICT_DATANAME_STOCK + DICT_DATANAME_fOU + DICT_DATANAME_OTHER
+#DICT_DATANAME = ['NhemiTemp','videoVBR']
+DICT_DATANAME = DICT_DATANAME_OTHER
+#DICT_DATANAME = DICT_DATANAME_STOCK + DICT_DATANAME_fOU + DICT_DATANAME_OTHER
 
 #DICT_METHOD = ['fSDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE']
-DICT_METHOD = ['ArmaSDE']
-#DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE']
+#DICT_METHOD = ['ArmaSDE']
+DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE']
 
 #ts_points = ['2010/1/4', '2020/12/31', '2021/11/11'] # train_start, train_end=test_start, test_end 
 #ts_points = ['1986/4/10', '2015/12/31', '2021/11/11'] 
@@ -72,12 +71,9 @@ if args.sde_adjoint:
 else:
     from torchsde import sdeint
 from utils.fsde_solver import fsdeint
-from utils.armasde_solver import armasdeint
 
 
 def train(data_name, method):
-    #global p, theta
-
     device = torch.device('cuda:' + str(args.gpu)
                           if torch.cuda.is_available() else 'cpu')
 
@@ -125,7 +121,7 @@ def train(data_name, method):
         params = (list(func_fSDE.parameters())) 
         #params = (list(fsdenet.parameters()))
     elif method == "ArmaSDE":
-        func_ArmaSDE = ArmaSDE().to(device)
+        func_ArmaSDE = LatentArmaSDEfunc().to(device)
         params = list(func_ArmaSDE.parameters())
         """
         p = torch.tensor(p, dtype=torch.float32, requires_grad=True)
@@ -140,8 +136,12 @@ def train(data_name, method):
     optimizer = optim.Adam(params, lr=args.lr)
     loss_meter = RunningAverageMeter()
 
-    for name, param in func_ArmaSDE.named_parameters():
-        print(f"{name}: requires_grad = {param.requires_grad}")
+    best_loss = float("inf")
+    patience = 100  # Number to determine how many times in a row to stop if there is no improvement
+    patience_counter = 0
+
+    #for name, param in func_ArmaSDE.named_parameters():
+        #print(f"{name}: requires_grad = {param.requires_grad}")
     
     for itr in range(1, args.niters + 1): #tqdm(range(1, args.niters + 1)):
         optimizer.zero_grad()
@@ -206,20 +206,27 @@ def train(data_name, method):
 
             loss.backward()
 
-            """
-            # p と theta の勾配を表示
-            if p.grad is not None:
-                print(f"Gradient of p: {p.grad}")
-            if theta.grad is not None:
-                print(f"Gradient of theta: {theta.grad}")
-            """
-            print("pgrad: {}, thetagrad: {}".format(func_ArmaSDE.p.grad, func_ArmaSDE.theta.grad))
-            print("p: {}, theta: {}".format(func_ArmaSDE.p, func_ArmaSDE.theta))
+            #print("raw_pgrad: {}, raw_thetagrad: {}".format(func_ArmaSDE.raw_p.grad, func_ArmaSDE.raw_theta.grad))
+            #print("raw_p: {}, raw_theta: {}".format(func_ArmaSDE.raw_p, func_ArmaSDE.raw_theta))
+            print("p: {}, theta: {}".format(func_ArmaSDE.p, func_ArmaSDE.theta.item()))
             
             optimizer.step()
         
         #if itr%5==0:
-        print("Iter: {}, Log Likelihood: {:.4f}, Regularization: {:.4f}".format(itr, -loss, reg))        
+        print("Iter: {}, Log Likelihood: {:.4f}, Regularization: {:.4f}".format(itr, -loss, reg)) 
+
+        
+        # Early stopping
+        if loss < best_loss:
+            best_loss = loss
+            patience_counter = 0  # Reset if there is improvement
+        else:
+            patience_counter += 1  # Count if no improvement
+
+        if patience_counter >= patience:
+            print(f"Early stopping at iteration {itr}")
+            break    
+         
     print(f'Training complete after {itr} iters.\n')
     
     

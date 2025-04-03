@@ -173,7 +173,7 @@ def estimate_hurst(data, name, method):
     return out
 
 def print_error(list):
-    out = f'& {list[0]:.3f} $\\pm$ {list[1]:.3f}' 
+    out = f'& {list[0]:.3f} $\pm$ {list[1]:.3f}' 
     return out
 
 

@@ -266,80 +266,14 @@ class FSDENet(nn.Module):
         return solution
 """
 
-class LatentArmaSDEfunc(nn.Module):
+class LatentArmaSDEfunc(torch.nn.Module):
+    noise_type = 'general'
+    sde_type = 'ito'
 
     def __init__(self, nhidden=nhidden_armasde, state_dim=state_dim, gain=init_gain_armasde):
         super(LatentArmaSDEfunc, self).__init__()
-        self.drift_fc1 = nn.Linear(state_dim, nhidden)
-        self.drift_fc2 = nn.Linear(nhidden, nhidden)
-        self.drift_fc3 = nn.Linear(nhidden, state_dim)
-        #self.drift_act = nn.Tanh() #(inplace=True)
-        #self.act = nn.Tanh() #(inplace=True)
-        
-        self.diff_fc1 = nn.Linear(state_dim, nhidden)
-        self.diff_fc2 = nn.Linear(nhidden, nhidden)
-        self.diff_fc3 = nn.Linear(nhidden, state_dim)
-        #self.diff_act = nn.Tanh() #(inplace=True)
-        
-        self.act = nn.Tanh() #(inplace=True)
-
-        self.p = nn.Parameter(torch.tensor(0.0758 + 0.0696, dtype=torch.float32))
-        self.theta = nn.Parameter(torch.tensor(0.0696, dtype=torch.float32))
-
-        if bool_xavier_normal:
-            nn.init.xavier_normal_(self.drift_fc1.weight, gain)
-            nn.init.xavier_normal_(self.drift_fc2.weight, gain)
-            nn.init.xavier_normal_(self.drift_fc3.weight, gain)
-            nn.init.xavier_normal_(self.diff_fc1.weight, gain)
-            nn.init.xavier_normal_(self.diff_fc2.weight, gain)
-            nn.init.xavier_normal_(self.diff_fc3.weight, gain)
-        
-    def drift(self, y):
-        out = self.drift_fc1(y)
-        out = self.act(out)
-        out = self.drift_fc2(out)
-        out = self.act(out)
-        out = self.drift_fc3(out)
-        return out #.reshape(batch_dim, latent_dim)  
-
-    def diffusion(self, y):
-        out = self.diff_fc1(y)
-        out = self.act(out)
-        out = self.diff_fc2(out)
-        out = self.act(out)
-        out = self.diff_fc3(out)
-        return out #.reshape(batch_dim, latent_dim)  
-
-    def l_func(self, u):
-        """ torch.Tensor を維持しながら計算 """
-        numerator = 2 * self.theta * (self.p - self.theta)
-        denominator = (2 * self.p - self.theta) ** 2 * torch.exp(2 * (self.p - self.theta) * u) - self.theta ** 2
-        return self.theta * torch.exp(self.p * u) * (1 - numerator / denominator)
-
-    def noise_drift(self, X, t):
-        """ torch の計算を維持しつつ、numpy に渡す前に detach """
-        p_val = self.p.detach().numpy()  # detach() して計算グラフを切り離す
-        dX1 = - np.exp(-p_val * t) * X[1]
-        dX2 = 0.0  
-        return np.array([dX1, dX2])
-
-    def noise_diffusion(self, X, t):
-        """ l_func の計算結果も detach して numpy に変換 """
-        return np.array([
-            [1.0, 0.0], 
-            [0.0, self.l_func(torch.tensor(t, dtype=torch.float32)).detach().numpy()]
-        ])
-
-
-
-class ArmaSDE(torch.nn.Module):
-    noise_type = 'general'  # ノイズタイプ
-    sde_type = 'ito'  # SDEのタイプ
-
-    def __init__(self, nhidden=nhidden_armasde, state_dim=state_dim, gain=init_gain_armasde):
-        super(ArmaSDE, self).__init__()
-        self.p = nn.Parameter(torch.tensor(0.0758 + 0.0696, dtype=torch.float32))
-        self.theta = nn.Parameter(torch.tensor(0.0696, dtype=torch.float32))
+        self.raw_p = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.theta = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
 
         self.drift_fc1 = nn.Linear(state_dim, nhidden)
         self.drift_fc2 = nn.Linear(nhidden, nhidden)
@@ -359,13 +293,17 @@ class ArmaSDE(torch.nn.Module):
             nn.init.xavier_normal_(self.diff_fc2.weight, gain)
             nn.init.xavier_normal_(self.diff_fc3.weight, gain)
 
-    # Drift (ドリフト)
+    # Drift
     def f(self, t, y):
         out = self.act(self.drift_fc1(y[:,:state_dim]))
         out = self.act(self.drift_fc2(out))
         out = self.drift_fc3(out)
 
-        dX1dt = out - torch.exp(-self.p * t) * y[:,state_dim:]  
+        out2 = self.act(self.diff_fc1(y[:,:state_dim]))
+        out2 = self.act(self.diff_fc2(out2))
+        out2 = self.diff_fc3(out2)
+
+        dX1dt = out - torch.exp(-self.p * t) * out2 * y[0,state_dim]  
         dX2dt = torch.zeros_like(y[:,:1])
 
         #print("1;{}".format(torch.exp(-self.p * t) * y[:,state_dim:]))
@@ -378,16 +316,14 @@ class ArmaSDE(torch.nn.Module):
         #print(torch.cat([dX1, dX2], dim=1).size())
         return torch.cat([dX1dt, dX2dt], dim=1)
 
-    # Diffusion (拡散)
+    # Diffusion
     def g(self, t, y):
         def l_func(u):
             numerator = 2 * self.theta * (self.p - self.theta)
             denominator = (((2 * self.p - self.theta) ** 2) * torch.exp(2 * (self.p - self.theta) * u)) - self.theta ** 2
             return self.theta * torch.exp(self.p * u) * (1 - numerator / denominator)
-
-        l_vals = l_func(t).expand(batch_dim).reshape(batch_dim,-1) 
+        dX2dw = l_func(t).expand(batch_dim).reshape(batch_dim,-1) 
         #l_vals = torch.ones([]).expand(batch_dim).reshape(batch_dim,-1) 
-        dX2dw = l_vals
         #print("1;{}".format(l_vals))
 
         out = self.act(self.diff_fc1(y[:,:state_dim]))
@@ -398,3 +334,7 @@ class ArmaSDE(torch.nn.Module):
         #print(torch.cat([dX1dw, dX2dw], dim=1).reshape(batch_dim,state_dim+1,-1).size())
 
         return torch.cat([dX1dw, dX2dw], dim=1).reshape(batch_dim,state_dim+1,-1)
+
+    @property
+    def p(self):
+        return torch.relu(self.theta) + torch.exp(self.raw_p) # p > 0 and p > theta
