@@ -303,11 +303,12 @@ class LatentArmaSDEfunc(torch.nn.Module):
         out2 = self.act(self.diff_fc2(out2))
         out2 = self.diff_fc3(out2)
 
-        dX1dt = out - torch.exp(-self.p * t) * out2 * y[0,state_dim]  
+        dX1dt = out - torch.exp(-self.p * t) * out2 * y[:,state_dim:] #out2 * y[:,state_dim:] is Hadamard product
         dX2dt = torch.zeros_like(y[:,:1])
 
         #print("1;{}".format(torch.exp(-self.p * t) * y[:,state_dim:]))
-        #print("2;{}".format(out))
+        #print("2;{}".format(out2.size()))
+        #print("3;{}".format(y[:,state_dim:].size()))
         #print("3;{}".format(dX1))
         #print("4;{}".format(dX2))
         #print(dX1.size())
@@ -338,3 +339,86 @@ class LatentArmaSDEfunc(torch.nn.Module):
     @property
     def p(self):
         return torch.relu(self.theta) + torch.exp(self.raw_p) # p > 0 and p > theta
+
+
+"""
+#stationary incremental Gaussian Ito process Noise
+class LatentSiGIpNSDEfunc(torch.nn.Module):
+    noise_type = 'general'
+    sde_type = 'ito'
+
+    def __init__(self, nhidden=nhidden_armasde, state_dim=state_dim, gain=init_gain_armasde):
+        super(LatentArmaSDEfunc, self).__init__()
+        self.raw_p = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        self.theta = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+
+        self.drift_fc1 = nn.Linear(state_dim, nhidden)
+        self.drift_fc2 = nn.Linear(nhidden, nhidden)
+        self.drift_fc3 = nn.Linear(nhidden, state_dim)
+
+        self.diff_fc1 = nn.Linear(state_dim, nhidden)
+        self.diff_fc2 = nn.Linear(nhidden, nhidden)
+        self.diff_fc3 = nn.Linear(nhidden, state_dim)
+
+        self.l_fc1 = nn.Linear(1, nhidden)
+        self.l_fc2 = nn.Linear(nhidden, nhidden)
+        self.l_fc3 = nn.Linear(nhidden, 1)
+
+        self.act = nn.Tanh()
+
+        if bool_xavier_normal:
+            nn.init.xavier_normal_(self.drift_fc1.weight, gain)
+            nn.init.xavier_normal_(self.drift_fc2.weight, gain)
+            nn.init.xavier_normal_(self.drift_fc3.weight, gain)
+            nn.init.xavier_normal_(self.diff_fc1.weight, gain)
+            nn.init.xavier_normal_(self.diff_fc2.weight, gain)
+            nn.init.xavier_normal_(self.diff_fc3.weight, gain)
+
+    # Drift
+    def f(self, t, y):
+        out = self.act(self.drift_fc1(y[:,:state_dim]))
+        out = self.act(self.drift_fc2(out))
+        out = self.drift_fc3(out)
+
+        out2 = self.act(self.diff_fc1(y[:,:state_dim]))
+        out2 = self.act(self.diff_fc2(out2))
+        out2 = self.diff_fc3(out2)
+
+        dX1dt = out - out2 * y[:,state_dim:] #out2 * y[:,state_dim:] is Hadamard product
+        dX2dt = torch.zeros_like(y[:,:1])
+
+        #print("1;{}".format(torch.exp(-self.p * t) * y[:,state_dim:]))
+        #print("2;{}".format(out2.size()))
+        #print("3;{}".format(y[:,state_dim:].size()))
+        #print("3;{}".format(dX1))
+        #print("4;{}".format(dX2))
+        #print(dX1.size())
+        #print(dX2.size())
+        #print("5;{}".format(torch.cat([dX1, dX2], dim=1)))
+        #print(torch.cat([dX1, dX2], dim=1).size())
+        return torch.cat([dX1dt, dX2dt], dim=1)
+
+    # Diffusion
+    def g(self, t, y):
+        def l_func(s,u):
+            numerator = 2 * self.theta * (self.p - self.theta)
+            denominator = (((2 * self.p - self.theta) ** 2) * torch.exp(2 * (self.p - self.theta) * u)) - self.theta ** 2
+            return self.theta * torch.exp(self.p * u) * (1 - numerator / denominator)
+        
+        dX2dw = l_func(t).expand(batch_dim).reshape(batch_dim,-1) 
+        #l_vals = torch.ones([]).expand(batch_dim).reshape(batch_dim,-1) 
+        #print("1;{}".format(l_vals))
+
+        out = self.act(self.diff_fc1(y[:,:state_dim]))
+        out = self.act(self.diff_fc2(out))
+        out = self.diff_fc3(out)
+        dX1dw = out
+
+        #print(torch.cat([dX1dw, dX2dw], dim=1).reshape(batch_dim,state_dim+1,-1).size())
+
+        return torch.cat([dX1dw, dX2dw], dim=1).reshape(batch_dim,state_dim+1,-1)
+
+    @property
+    def p(self):
+        return torch.relu(self.theta) + torch.exp(self.raw_p) # p > 0 and p > theta
+"""

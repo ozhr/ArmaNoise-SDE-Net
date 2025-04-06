@@ -38,15 +38,19 @@ parser.add_argument('--num_paths', type=int, default=10)
 args = parser.parse_args()
 
 DICT_DATANAME_STOCK = ["SPX", "TPX", "SX5E"]
+#DICT_DATANAME_STOCK = ["SX5E"]
 DICT_DATANAME_fOU = ['fOU_H0.7', 'fOU_H0.8', 'fOU_H0.9']
-#DICT_DATANAME_fOU = ['fOU_H0.7']
+#DICT_DATANAME_fOU = ['fOU_H0.8']
 DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp']
+#DICT_DATANAME_OTHER = ['NileMin', 'videoVBR', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME = ['NileMin']
 #DICT_DATANAME = ['ethernet']
 #DICT_DATANAME = ['NhemiTemp','videoVBR']
-DICT_DATANAME = DICT_DATANAME_OTHER
-#DICT_DATANAME = DICT_DATANAME_STOCK + DICT_DATANAME_fOU + DICT_DATANAME_OTHER
+#DICT_DATANAME = DICT_DATANAME_OTHER
+DICT_DATANAME = DICT_DATANAME_STOCK + DICT_DATANAME_fOU + DICT_DATANAME_OTHER
+#DICT_DATANAME =  DICT_DATANAME_fOU
+#DICT_DATANAME = DICT_DATANAME_STOCK
 
 #DICT_METHOD = ['fSDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE']
@@ -155,7 +159,7 @@ def train(data_name, method):
         #print(train_data.shape)
         z0 = torch.zeros(batch_dim, latent_dim) + train_data[0, 0]
         #print("z0: {}".format(z0))
-        #print(z0.size())
+        #print("z0_size:{}".format{z0.size()})
         #print(z0.shape)
         
         if method == "RNN":
@@ -217,6 +221,7 @@ def train(data_name, method):
 
         
         # Early stopping
+        """
         if loss < best_loss:
             best_loss = loss
             patience_counter = 0  # Reset if there is improvement
@@ -225,7 +230,8 @@ def train(data_name, method):
 
         if patience_counter >= patience:
             print(f"Early stopping at iteration {itr}")
-            break    
+            break   
+        """ 
          
     print(f'Training complete after {itr} iters.\n')
     
