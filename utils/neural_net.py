@@ -19,9 +19,11 @@ bool_xavier_normal = True
 init_gain_sde = 1
 init_gain_fsde = 1 #1.5 
 init_gain_armasde = 1
+init_gain_nnkernelarmasde = nn.init.calculate_gain('tanh')
 batch_dim, state_dim, bm_dim = 100, 1, 1
 nhidden_rnn, nhidden_sde, nhidden_fsde = 40, 20, 20
 nhidden_armasde = 20
+nhidden_nnkernelarmasde = 20
 latent_dim = 1
 
 
@@ -275,11 +277,11 @@ class LatentArmaSDEfunc(torch.nn.Module):
         self.raw_p = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
         self.theta = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
 
-        self.drift_fc1 = nn.Linear(state_dim, nhidden)
+        self.drift_fc1 = nn.Linear(state_dim+1, nhidden) #+1 for time t
         self.drift_fc2 = nn.Linear(nhidden, nhidden)
         self.drift_fc3 = nn.Linear(nhidden, state_dim)
 
-        self.diff_fc1 = nn.Linear(state_dim, nhidden)
+        self.diff_fc1 = nn.Linear(state_dim+1, nhidden) #+1 for time t
         self.diff_fc2 = nn.Linear(nhidden, nhidden)
         self.diff_fc3 = nn.Linear(nhidden, state_dim)
 
@@ -295,11 +297,14 @@ class LatentArmaSDEfunc(torch.nn.Module):
 
     # Drift
     def f(self, t, y):
-        out = self.act(self.drift_fc1(y[:,:state_dim]))
+        t_input = t.expand(y.size(0), 1) #(batch_size, 1)
+        input = torch.cat([y[:, :state_dim], t_input], dim=1)
+
+        out = self.act(self.drift_fc1(input))
         out = self.act(self.drift_fc2(out))
         out = self.drift_fc3(out)
 
-        out2 = self.act(self.diff_fc1(y[:,:state_dim]))
+        out2 = self.act(self.diff_fc1(input))
         out2 = self.act(self.diff_fc2(out2))
         out2 = self.diff_fc3(out2)
 
@@ -326,8 +331,10 @@ class LatentArmaSDEfunc(torch.nn.Module):
         dX2dw = l_func(t).expand(batch_dim).reshape(batch_dim,-1) 
         #l_vals = torch.ones([]).expand(batch_dim).reshape(batch_dim,-1) 
         #print("1;{}".format(l_vals))
+        t_input = t.expand(y.size(0), 1) #(batch_size, 1)
+        input = torch.cat([y[:, :state_dim], t_input], dim=1)
 
-        out = self.act(self.diff_fc1(y[:,:state_dim]))
+        out = self.act(self.diff_fc1(input))
         out = self.act(self.diff_fc2(out))
         out = self.diff_fc3(out)
         dX1dw = out
@@ -338,8 +345,101 @@ class LatentArmaSDEfunc(torch.nn.Module):
 
     @property
     def p(self):
-        return torch.relu(self.theta) + torch.exp(self.raw_p) # p > 0 and p > theta
+        return nn.functional.softplus(self.theta) + torch.exp(self.raw_p) # p > 0 and p > theta
 
+class LatentNNKernelArmaSDEfunc(torch.nn.Module):
+    noise_type = 'general'
+    sde_type = 'ito'
+
+    def __init__(self, nhidden=nhidden_nnkernelarmasde, state_dim=state_dim, gain=init_gain_nnkernelarmasde):
+        super(LatentNNKernelArmaSDEfunc, self).__init__()
+        #self.raw_p = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+        #self.theta = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
+
+        self.drift_fc1 = nn.Linear(state_dim+1, nhidden) #+1 for time t
+        self.drift_fc2 = nn.Linear(nhidden, nhidden)
+        self.drift_fc3 = nn.Linear(nhidden, state_dim)
+
+        self.diff_fc1 = nn.Linear(state_dim+1, nhidden) #+1 for time t
+        self.diff_fc2 = nn.Linear(nhidden, nhidden)
+        self.diff_fc3 = nn.Linear(nhidden, state_dim)
+
+        self.ell_1_fc1 = nn.Linear(1,nhidden)
+        self.ell_1_fc2 = nn.Linear(nhidden, nhidden)
+        self.ell_1_fc3 = nn.Linear(nhidden, 1)
+
+        self.ell_2_fc1 = nn.Linear(1,nhidden)
+        self.ell_2_fc2 = nn.Linear(nhidden, nhidden)
+        self.ell_2_fc3 = nn.Linear(nhidden, 1)
+
+        self.act = nn.Tanh()
+
+        if bool_xavier_normal:
+            nn.init.xavier_normal_(self.drift_fc1.weight, gain)
+            nn.init.xavier_normal_(self.drift_fc2.weight, gain)
+            nn.init.xavier_normal_(self.drift_fc3.weight, gain)
+            nn.init.xavier_normal_(self.diff_fc1.weight, gain)
+            nn.init.xavier_normal_(self.diff_fc2.weight, gain)
+            nn.init.xavier_normal_(self.diff_fc3.weight, gain)
+            nn.init.xavier_normal_(self.ell_1_fc1.weight, gain)
+            nn.init.xavier_normal_(self.ell_1_fc2.weight, gain)
+            nn.init.xavier_normal_(self.ell_1_fc3.weight, gain)
+            nn.init.xavier_normal_(self.ell_2_fc1.weight, gain)
+            nn.init.xavier_normal_(self.ell_2_fc2.weight, gain)
+            nn.init.xavier_normal_(self.ell_2_fc3.weight, gain)
+
+    # Drift
+    def f(self, t, y):
+        t_input = t.expand(y.size(0), 1) #(batch_size, 1)
+        input = torch.cat([y[:, :state_dim], t_input], dim=1)
+
+        out = self.act(self.drift_fc1(input))
+        out = self.act(self.drift_fc2(out))
+        out = self.drift_fc3(out)
+
+        out2 = self.act(self.diff_fc1(input))
+        out2 = self.act(self.diff_fc2(out2))
+        out2 = self.diff_fc3(out2)
+
+        out3 = self.act(self.ell_1_fc1(t.unsqueeze(0)))
+        out3 = self.act(self.ell_1_fc2(out3))
+        out3 = self.act(self.ell_1_fc3(out3))
+
+        dX1dt = out - out3 * out2 * y[:,state_dim:] #out2 * y[:,state_dim:] is Hadamard product
+        dX2dt = torch.zeros_like(y[:,:1])
+
+        #print("1;{}".format(torch.exp(-self.p * t) * y[:,state_dim:]))
+        #print("2;{}".format(out2.size()))
+        #print("3;{}".format(y[:,state_dim:].size()))
+        #print("3;{}".format(dX1))
+        #print("4;{}".format(dX2))
+        #print(dX1.size())
+        #print(dX2.size())
+        #print("5;{}".format(torch.cat([dX1, dX2], dim=1)))
+        #print(torch.cat([dX1, dX2], dim=1).size())
+        return torch.cat([dX1dt, dX2dt], dim=1)
+
+    # Diffusion
+    def g(self, t, y):
+        out4 = self.act(self.ell_2_fc1(t.unsqueeze(0)))
+        out4 = self.act(self.ell_2_fc2(out4))
+        out4 = self.act(self.ell_2_fc3(out4))
+
+        dX2dw = out4.expand(batch_dim).reshape(batch_dim,-1) 
+        #l_vals = torch.ones([]).expand(batch_dim).reshape(batch_dim,-1) 
+        #print("1;{}".format(l_vals))
+
+        t_input = t.expand(y.size(0), 1) #(batch_size, 1)
+        input = torch.cat([y[:, :state_dim], t_input], dim=1)
+
+        out = self.act(self.diff_fc1(input))
+        out = self.act(self.diff_fc2(out))
+        out = self.diff_fc3(out)
+        dX1dw = out
+
+        #print(torch.cat([dX1dw, dX2dw], dim=1).reshape(batch_dim,state_dim+1,-1).size())
+
+        return torch.cat([dX1dw, dX2dw], dim=1).reshape(batch_dim,state_dim+1,-1)
 
 """
 #stationary incremental Gaussian Ito process Noise

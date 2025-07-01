@@ -91,5 +91,6 @@ def calculate_log_likelihood(sample_paths, real_path):
     var = torch.var(torch.diff(sample_paths, dim=1), dim=0)
     x = torch.diff(real_path)
     log_pdf = log_normal_pdf(x, mean, var)
+    #return log_pdf.sum()
     return log_pdf.mean()
     

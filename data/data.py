@@ -118,3 +118,98 @@ def get_other_data(name, split_rate):
     test_data = data[split_pt:]
 
     return train_data.reshape(-1, 1), test_data.reshape(-1, 1), train_ts_str, test_ts_str, train_ts, test_ts
+
+
+def get_short_memory_data(split_rate):  
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    data = pd.read_csv("ar1_short_memory.csv")
+    data_num = data['t'].size
+    split_pt = round(split_rate * data_num)
+    
+    train_ts = data['t'].values[:split_pt] / data_num
+    test_ts = data['t'].values[split_pt:] / data_num
+    train_ts_str = train_ts.astype(object) #str(train_ts)
+    test_ts_str = test_ts.astype(object) #str(test_ts)
+
+
+    data = data['x'].values
+    data = (data - np.mean(data)) / np.std(data)
+    train_data = data[:split_pt]
+    test_data = data[split_pt:]
+
+    return train_data.reshape(-1, 1), test_data.reshape(-1, 1), train_ts_str, test_ts_str, train_ts, test_ts
+
+def get_rough_data(split_rate):  
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    data = pd.read_csv("log_volatility_sp500.csv")
+    data_num = data['t'].size
+    split_pt = round(split_rate * data_num)
+    
+    train_ts = data['t'].values[:split_pt] / data_num
+    test_ts = data['t'].values[split_pt:] / data_num
+    train_ts_str = train_ts.astype(object) #str(train_ts)
+    test_ts_str = test_ts.astype(object) #str(test_ts)
+
+
+    data = data['x'].values
+    data = (data - np.mean(data)) / np.std(data)
+    train_data = data[:split_pt]
+    test_data = data[split_pt:]
+
+    return train_data.reshape(-1, 1), test_data.reshape(-1, 1), train_ts_str, test_ts_str, train_ts, test_ts
+
+
+def get_short_fOU_data(name, split_rate):  
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    data = pd.read_csv("fOU_multicolumn.csv")
+    data_num = data['t'].size
+    split_pt = round(split_rate * data_num)
+    
+    train_ts = data['t'].values[:split_pt] #/ data_num
+    test_ts = data['t'].values[split_pt:] #/ data_num
+    train_ts_str = train_ts.astype(object) #str(train_ts)
+    test_ts_str = test_ts.astype(object) #str(test_ts)
+
+    if name == 'fOU_H0.1':
+        data = data['H=0.1'].values
+    elif name == 'fOU_H0.2':
+        data = data['H=0.2'].values
+    elif name == 'fOU_H0.3':
+        data = data['H=0.3'].values
+    elif name == 'fOU_H0.4':
+        data = data['H=0.4'].values
+    data = (data - np.mean(data)) / np.std(data)
+    train_data = data[:split_pt]
+    test_data = data[split_pt:]
+
+    return train_data.reshape(-1, 1), test_data.reshape(-1, 1), train_ts_str, test_ts_str, train_ts, test_ts
+
+
+
+def get_OU_data(name, split_rate):  
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    data = pd.read_csv("OU_multicolumn.csv")
+    data_num = data['t'].size
+    split_pt = round(split_rate * data_num)
+    
+    train_ts = data['t'].values[:split_pt] #/ data_num
+    test_ts = data['t'].values[split_pt:] #/ data_num
+    train_ts_str = train_ts.astype(object) #str(train_ts)
+    test_ts_str = test_ts.astype(object) #str(test_ts)
+
+    if name == 'alpha=-2':
+        data = data['alpha=-2'].values
+    elif name == 'alpha=-10':
+        data = data['alpha=-10'].values
+    elif name == 'alpha=-20':
+        data = data['alpha=-20'].values
+    elif name == 'alpha=-50':
+        data = data['alpha=-50'].values
+    elif name == 'alpha=-100':
+        data = data['alpha=-100'].values
+    data = (data - np.mean(data)) / np.std(data)
+    train_data = data[:split_pt]
+    test_data = data[split_pt:]
+
+    return train_data.reshape(-1, 1), test_data.reshape(-1, 1), train_ts_str, test_ts_str, train_ts, test_ts
+
