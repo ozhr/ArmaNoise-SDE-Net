@@ -17,7 +17,7 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 
-from data.data import get_stock_data, get_fOU_data, get_other_data, get_short_memory_data, get_rough_data, get_short_fOU_data, get_OU_data
+from data.data import get_stock_data, get_fOU_data, get_other_data, get_short_memory_data, get_rough_data, get_short_fOU_data, get_OU_data, get_FBM_data
 from utils.neural_net import LatentFSDEfunc, LatentODEfunc, GeneratorRNN, LatentArmaSDEfunc, LatentNNKernelArmaSDEfunc
 from utils.neural_net import LatentSDEfunc, latent_dim, batch_dim, nhidden_rnn
 from utils.utils import RunningAverageMeter, log_normal_pdf, normal_kl, calculate_log_likelihood
@@ -37,27 +37,33 @@ parser.add_argument('--gpu', type=int, default=0)
 parser.add_argument('--num_paths', type=int, default=10)
 args = parser.parse_args()
 
-DICT_DATANAME_STOCK = ["SPX", "TPX", "SX5E"]
+#DICT_DATANAME_STOCK = ["SPX", "TPX", "SX5E"]
 #DICT_DATANAME_STOCK = ["SX5E"]
-#DICT_DATANAME_STOCK = ["SPX"]
+DICT_DATANAME_STOCK = ["SPX"]
 #DICT_DATANAME_STOCK = ["TPX"]
 DICT_DATANAME_fOU = ['fOU_H0.7', 'fOU_H0.8', 'fOU_H0.9']
 #DICT_DATANAME_fOU = ['fOU_H0.7']
 #DICT_DATANAME_fOU = ['fOU_H0.8']
 #DICT_DATANAME_fOU = ['fOU_H0.9']
 DICT_DATANAME_SHORT_fOU = ['fOU_H0.1', 'fOU_H0.2', 'fOU_H0.3', 'fOU_H0.4']
-DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp']
+#DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME_OTHER = ['NileMin']
 #DICT_DATANAME_OTHER = ['ethernet']
 #DICT_DATANAME_OTHER = ['videoVBR']
 #DICT_DATANAME_OTHER = ['NBSdiff']
-#DICT_DATANAME_OTHER = ['NhemiTemp']
+DICT_DATANAME_OTHER = ['NhemiTemp']
 #DICT_DATANAME_OTHER = ['NileMin', 'videoVBR', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'NBSdiff', 'NhemiTemp']
 DICT_DATANAME_SHORT = ['ar1_short_memory']
 DICT_DATANAME_ROUGH = ['log_volatility_sp500']
 #DICT_DATANAME_OU = ['alpha=-2', 'alpha=-10', 'alpha=-20', 'alpha=-50', 'alpha=-100']
-DICT_DATANAME_OU = ['alpha=-20', 'alpha=-50', 'alpha=-100']
+#DICT_DATANAME_OU = ['alpha=-20', 'alpha=-50', 'alpha=-100']
+DICT_DATANAME_OU = ['alpha=-50']
+#DICT_DATANAME_FBM = ['fBM_H0.1', 'fBM_H0.2', 'fBM_H0.3', 'fBM_H0.4', 'fBM_H0.6', 'fBM_H0.7', 'fBM_H0.8', 'fBM_H0.9']
+#DICT_DATANAME_FBM = ['fBM_H0.2', 'fBM_H0.3', 'fBM_H0.4', 'fBM_H0.6', 'fBM_H0.7', 'fBM_H0.8', 'fBM_H0.9']
+#DICT_DATANAME_FBM = ['fBM_H0.2', 'fBM_H0.3', 'fBM_H0.4']
+DICT_DATANAME_FBM = ['fBM_H0.4']
+
 
 #DICT_DATANAME = ['NileMin']
 #DICT_DATANAME = ['ethernet']
@@ -67,18 +73,19 @@ DICT_DATANAME_OU = ['alpha=-20', 'alpha=-50', 'alpha=-100']
 #DICT_DATANAME =  DICT_DATANAME_fOU + DICT_DATANAME_OTHER
 #DICT_DATANAME = DICT_DATANAME_fOU
 #DICT_DATANAME = DICT_DATANAME_STOCK
-#DICT_DATANAME = DICT_DATANAME_OTHER
+DICT_DATANAME = DICT_DATANAME_OTHER
 #DICT_DATANAME = DICT_DATANAME_SHORT
 #DICT_DATANAME = DICT_DATANAME_ROUGH
 #DICT_DATANAME = DICT_DATANAME_SHORT_fOU
-DICT_DATANAME = DICT_DATANAME_OU
+#DICT_DATANAME = DICT_DATANAME_OU
+#DICT_DATANAME = DICT_DATANAME_FBM
 
-#DICT_METHOD = ['fSDE']
+DICT_METHOD = ['fSDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE']
 #DICT_METHOD = ['ArmaSDE']
 #DICT_METHOD = ['NNKernelArmaSDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE']
-DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE', 'NNKernelArmaSDE']
+#DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE', 'NNKernelArmaSDE']
 
 #ts_points = ['2010/1/4', '2020/12/31', '2021/11/11'] # train_start, train_end=test_start, test_end 
 #ts_points = ['1986/4/10', '2015/12/31', '2021/11/11'] 
@@ -127,6 +134,8 @@ def train(data_name, method):
         train_data, test_data, train_ts_str, test_ts_str, train_ts, test_ts = get_short_fOU_data(data_name, split_rate)
     elif data_name in DICT_DATANAME_OU: 
         train_data, test_data, train_ts_str, test_ts_str, train_ts, test_ts = get_OU_data(data_name, split_rate)
+    elif data_name in DICT_DATANAME_FBM: 
+        train_data, test_data, train_ts_str, test_ts_str, train_ts, test_ts = get_FBM_data(data_name, split_rate)
     train_data = torch.from_numpy(train_data).float().to(device) 
     test_data = torch.from_numpy(test_data).float().to(device)
     train_ts = torch.from_numpy(train_ts).float().to(device)

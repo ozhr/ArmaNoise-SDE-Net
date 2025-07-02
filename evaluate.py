@@ -16,7 +16,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import r2_score
 import statsmodels.api as sm
 
-from train import DICT_DATANAME, DICT_DATANAME_STOCK, DICT_DATANAME_fOU, DICT_DATANAME_OTHER, DICT_DATANAME_ROUGH, DICT_DATANAME_SHORT, DICT_DATANAME_SHORT_fOU, DICT_DATANAME_OU
+from train import DICT_DATANAME, DICT_DATANAME_STOCK, DICT_DATANAME_fOU, DICT_DATANAME_OTHER, DICT_DATANAME_ROUGH, DICT_DATANAME_SHORT, DICT_DATANAME_SHORT_fOU, DICT_DATANAME_OU, DICT_DATANAME_FBM
 from train import DICT_METHOD 
 from train import stock_ts_points, split_rate
 from utils.plots import plot_generated_paths, plot_hist, plot_correlogram, plot_scatter
@@ -92,6 +92,15 @@ def read_data(data_name, method):
         path_hist_train = stock_transform(data_csv[[data_name]].values[:split_pt], eval_obj).reshape(-1)
         path_hist_test = stock_transform(data_csv[[data_name]].values[split_pt:], eval_obj).reshape(-1)
     elif data_name in DICT_DATANAME_OU:
+        #eval_obj = 'price'
+        split_pt = int(str(round(split_rate * data_csv.shape[0])))
+        paths_gen = stock_transform(data_csv.values[:,2:], eval_obj)
+        paths_gen_train = stock_transform(data_csv.values[:split_pt,2:], eval_obj)
+        paths_gen_test = stock_transform(data_csv.values[split_pt:,2:], eval_obj) 
+        path_hist = stock_transform(data_csv[[data_name]].values, eval_obj).reshape(-1)
+        path_hist_train = stock_transform(data_csv[[data_name]].values[:split_pt], eval_obj).reshape(-1)
+        path_hist_test = stock_transform(data_csv[[data_name]].values[split_pt:], eval_obj).reshape(-1)
+    elif data_name in DICT_DATANAME_FBM:
         #eval_obj = 'price'
         split_pt = int(str(round(split_rate * data_csv.shape[0])))
         paths_gen = stock_transform(data_csv.values[:,2:], eval_obj)
@@ -235,6 +244,8 @@ def save_summary():
             elif key_data in DICT_DATANAME_SHORT_fOU: 
                 paths_gen, paths_gen_train, paths_gen_test, path_hist, path_hist_train, path_hist_test = read_data(key_data, key_method)
             elif key_data in DICT_DATANAME_OU: 
+                paths_gen, paths_gen_train, paths_gen_test, path_hist, path_hist_train, path_hist_test = read_data(key_data, key_method)
+            elif key_data in DICT_DATANAME_FBM: 
                 paths_gen, paths_gen_train, paths_gen_test, path_hist, path_hist_train, path_hist_test = read_data(key_data, key_method)
             plot_correlogram(key_data, key_method, path_hist, paths_gen[:,0])
             summary[i, 0] = print_error(estimate_hurst(paths_gen, key_data, key_method))

@@ -213,3 +213,39 @@ def get_OU_data(name, split_rate):
 
     return train_data.reshape(-1, 1), test_data.reshape(-1, 1), train_ts_str, test_ts_str, train_ts, test_ts
 
+
+def get_FBM_data(name, split_rate):  
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
+    data = pd.read_csv("fbm_multicolumn.csv")
+    data_num = data['t'].size
+    split_pt = round(split_rate * data_num)
+    
+    train_ts = data['t'].values[:split_pt] #/ data_num
+    test_ts = data['t'].values[split_pt:] #/ data_num
+    train_ts_str = train_ts.astype(object) #str(train_ts)
+    test_ts_str = test_ts.astype(object) #str(test_ts)
+
+    if name == 'fBM_H0.1':
+        data = data['H=0.1'].values
+    elif name == 'fBM_H0.2':
+        data = data['H=0.2'].values
+    elif name == 'fBM_H0.3':
+        data = data['H=0.3'].values
+    elif name == 'fBM_H0.4':
+        data = data['H=0.4'].values
+    elif name == 'fBM_H0.5':
+        data = data['H=0.5'].values
+    elif name == 'fBM_H0.6':
+        data = data['H=0.6'].values
+    elif name == 'fBM_H0.7':
+        data = data['H=0.7'].values
+    elif name == 'fBM_H0.8':
+        data = data['H=0.8'].values
+    elif name == 'fBM_H0.9':
+        data = data['H=0.9'].values
+    data = (data - np.mean(data)) / np.std(data)
+    train_data = data[:split_pt]
+    test_data = data[split_pt:]
+
+    return train_data.reshape(-1, 1), test_data.reshape(-1, 1), train_ts_str, test_ts_str, train_ts, test_ts
+
