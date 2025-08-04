@@ -1,3 +1,13 @@
+# This file is based on code from:
+#   Original Copyright (c) 2022 Kohei Hayashi
+#   Licensed under the MIT License
+#
+# Modifications:
+#   Copyright (c) 2025 Hiromu Ozai
+#   Released under the MIT License
+#
+# See the LICENSE file in the repository root for full license text.
+
 import os
 
 import matplotlib.pyplot as plt

@@ -1,3 +1,13 @@
+# This file is based on code from:
+#   Original Copyright (c) 2022 Kohei Hayashi
+#   Licensed under the MIT License
+#
+# Modifications:
+#   Copyright (c) 2025 Hiromu Ozai
+#   Released under the MIT License
+#
+# See the LICENSE file in the repository root for full license text.
+
 import os
 import argparse
 import logging
@@ -20,7 +30,7 @@ import torch.nn.functional as F
 from data.data import get_stock_data, get_fOU_data, get_other_data, get_short_memory_data, get_rough_data, get_short_fOU_data, get_OU_data, get_FBM_data
 from utils.neural_net import LatentFSDEfunc, LatentODEfunc, GeneratorRNN, LatentArmaSDEfunc, LatentNNKernelArmaSDEfunc
 from utils.neural_net import LatentSDEfunc, latent_dim, batch_dim, nhidden_rnn
-from utils.utils import RunningAverageMeter, log_normal_pdf, normal_kl, calculate_log_likelihood
+from utils.utils import RunningAverageMeter, log_normal_pdf, normal_kl, calculate_log_likelihood, acf_loss, pathwise_mse_loss
 from utils.plots import plot_generated_paths, plot_original_path, plot_hist
 from utils.utils import save_csv, tensor_to_numpy
 
@@ -30,7 +40,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--ode_adjoint', type=eval, default=False)
 parser.add_argument('--sde_adjoint', type=eval, default=False)
 parser.add_argument('--niters', type=int, default=1000) # originally 5000
-parser.add_argument('--lr', type=float, default=0.04)
+parser.add_argument('--lr', type=float, default=0.004)
 parser.add_argument('--reg_lambda', type=float, default=0)
 parser.add_argument('--hurst', type=float, default=0.7)
 parser.add_argument('--gpu', type=int, default=0)
@@ -39,30 +49,31 @@ args = parser.parse_args()
 
 #DICT_DATANAME_STOCK = ["SPX", "TPX", "SX5E"]
 #DICT_DATANAME_STOCK = ["SX5E"]
-DICT_DATANAME_STOCK = ["SPX"]
-#DICT_DATANAME_STOCK = ["TPX"]
+#DICT_DATANAME_STOCK = ["SPX"]
+DICT_DATANAME_STOCK = ["TPX"]
 DICT_DATANAME_fOU = ['fOU_H0.7', 'fOU_H0.8', 'fOU_H0.9']
 #DICT_DATANAME_fOU = ['fOU_H0.7']
 #DICT_DATANAME_fOU = ['fOU_H0.8']
 #DICT_DATANAME_fOU = ['fOU_H0.9']
 DICT_DATANAME_SHORT_fOU = ['fOU_H0.1', 'fOU_H0.2', 'fOU_H0.3', 'fOU_H0.4']
 #DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'videoVBR', 'NBSdiff', 'NhemiTemp']
+#DICT_DATANAME_OTHER = ['ethernet','videoVBR', 'NBSdiff']
 #DICT_DATANAME_OTHER = ['NileMin']
 #DICT_DATANAME_OTHER = ['ethernet']
 #DICT_DATANAME_OTHER = ['videoVBR']
-#DICT_DATANAME_OTHER = ['NBSdiff']
-DICT_DATANAME_OTHER = ['NhemiTemp']
+DICT_DATANAME_OTHER = ['NBSdiff']
+#DICT_DATANAME_OTHER = ['NhemiTemp']
 #DICT_DATANAME_OTHER = ['NileMin', 'videoVBR', 'NBSdiff', 'NhemiTemp']
 #DICT_DATANAME_OTHER = ['NileMin', 'ethernet', 'NBSdiff', 'NhemiTemp']
 DICT_DATANAME_SHORT = ['ar1_short_memory']
 DICT_DATANAME_ROUGH = ['log_volatility_sp500']
-#DICT_DATANAME_OU = ['alpha=-2', 'alpha=-10', 'alpha=-20', 'alpha=-50', 'alpha=-100']
+DICT_DATANAME_OU = ['alpha=-2', 'alpha=-10', 'alpha=-20', 'alpha=-50', 'alpha=-100']
 #DICT_DATANAME_OU = ['alpha=-20', 'alpha=-50', 'alpha=-100']
-DICT_DATANAME_OU = ['alpha=-50']
+#DICT_DATANAME_OU = ['alpha=-50']
 #DICT_DATANAME_FBM = ['fBM_H0.1', 'fBM_H0.2', 'fBM_H0.3', 'fBM_H0.4', 'fBM_H0.6', 'fBM_H0.7', 'fBM_H0.8', 'fBM_H0.9']
 #DICT_DATANAME_FBM = ['fBM_H0.2', 'fBM_H0.3', 'fBM_H0.4', 'fBM_H0.6', 'fBM_H0.7', 'fBM_H0.8', 'fBM_H0.9']
-#DICT_DATANAME_FBM = ['fBM_H0.2', 'fBM_H0.3', 'fBM_H0.4']
-DICT_DATANAME_FBM = ['fBM_H0.4']
+DICT_DATANAME_FBM = ['fBM_H0.2', 'fBM_H0.3', 'fBM_H0.4']
+#DICT_DATANAME_FBM = ['fBM_H0.4']
 
 
 #DICT_DATANAME = ['NileMin']
@@ -80,12 +91,13 @@ DICT_DATANAME = DICT_DATANAME_OTHER
 #DICT_DATANAME = DICT_DATANAME_OU
 #DICT_DATANAME = DICT_DATANAME_FBM
 
-DICT_METHOD = ['fSDE']
+#DICT_METHOD = ['fSDE']
+#DICT_METHOD = ['SDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE']
 #DICT_METHOD = ['ArmaSDE']
 #DICT_METHOD = ['NNKernelArmaSDE']
 #DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE']
-#DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE', 'NNKernelArmaSDE']
+DICT_METHOD = ['RNN', 'SDE', 'fSDE', 'ArmaSDE', 'NNKernelArmaSDE']
 
 #ts_points = ['2010/1/4', '2020/12/31', '2021/11/11'] # train_start, train_end=test_start, test_end 
 #ts_points = ['1986/4/10', '2015/12/31', '2021/11/11'] 
@@ -95,7 +107,7 @@ split_rate = 0.8
 #fOU_ts_points = ['0', '900', '1000']
 #other_ts_points = ['0', '600', '663']
 
-resume_training = True  #true when using saved parameters
+resume_training = True #true when using saved parameters
 
 if args.ode_adjoint:
     from torchdiffeq import odeint_adjoint as odeint
@@ -212,8 +224,8 @@ def train(data_name, method):
     else:
         best_loss = float("inf")
 
-    #patience = args.niters  # Number to determine how many times in a row to stop if there is no improvement
-    patience = args.niters*0.2
+    patience = args.niters  # Number to determine how many times in a row to stop if there is no improvement
+    #patience = args.niters*0.2
     patience_counter = 0
 
     #for name, param in func_ArmaSDE.named_parameters():
@@ -280,6 +292,12 @@ def train(data_name, method):
 
         with torch.autograd.set_detect_anomaly(True):
             loss = - calculate_log_likelihood(pred_z[:,:,0], train_data[:,0])
+            #loss_acf = acf_loss(pred_z[:,:,0], train_data[:,0])
+            #loss_path = pathwise_mse_loss(pred_z[:,:,0], train_data[:,0])
+
+            #loss = 0
+            #loss += loss_acf
+            #loss += loss_path
         
             reg_lambda = args.reg_lambda
             reg = torch.tensor(0.) 

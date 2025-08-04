@@ -1,3 +1,13 @@
+# This file is based on code from:
+#   Original Copyright (c) 2022 Kohei Hayashi
+#   Licensed under the MIT License
+#
+# Modifications:
+#   Copyright (c) 2025 Hiromu Ozai
+#   Released under the MIT License
+#
+# See the LICENSE file in the repository root for full license text.
+
 import numpy as np
 # from numpy.core.arrayprint import printoptions
 #from numpy.lib.type_check import real
@@ -93,4 +103,37 @@ def calculate_log_likelihood(sample_paths, real_path):
     log_pdf = log_normal_pdf(x, mean, var)
     #return log_pdf.sum()
     return log_pdf.mean()
+
+
+def acf_loss(real_path, sample_paths, max_lag=500):
+    def acf(x,y, lag):
+        x = x - x.mean()
+        if lag >= len(x):
+            return torch.tensor(0.0, device=x.device)
+        return (torch.sum(x[:-lag] * x[lag:]) / (torch.sum(x * x) + 1e-8) - torch.sum(y[:-lag] * y[lag:]) / (torch.sum(y * y) + 1e-8))**2
+
+    # 差分
+    real_diffs = torch.diff(real_path)
+
+    # sample_paths の次元で分岐
+    if sample_paths.ndim == 1:
+        sample_diffs = torch.diff(sample_paths).unsqueeze(0)  # shape: [1, T-1]
+    else:
+        sample_diffs = torch.diff(sample_paths, dim=1)  # shape: [N, T-1]
+
+    loss = 0.0
+    y = real_diffs - real_diffs.mean()
+    for lag in range(1, max_lag + 1):
+        #real_acf = acf(real_diffs, lag)
+        loss = torch.stack([acf(x,y, lag) for x in sample_diffs])
+        loss = loss.mean()
+
+    return loss
+
+
+def pathwise_mse_loss(real_path, sample_paths):
+    return torch.mean((sample_paths - real_path.unsqueeze(0))**4)
+
+
+
     

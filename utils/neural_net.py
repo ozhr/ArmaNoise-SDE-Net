@@ -1,3 +1,13 @@
+# This file is based on code from:
+#   Original Copyright (c) 2022 Kohei Hayashi
+#   Licensed under the MIT License
+#
+# Modifications:
+#   Copyright (c) 2025 Hiromu Ozai
+#   Released under the MIT License
+#
+# See the LICENSE file in the repository root for full license text.
+
 #from typing import Tuple
 import itertools
 
@@ -356,11 +366,11 @@ class LatentNNKernelArmaSDEfunc(torch.nn.Module):
         #self.raw_p = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
         #self.theta = nn.Parameter(torch.tensor(0.0, dtype=torch.float32))
 
-        self.drift_fc1 = nn.Linear(state_dim+1, nhidden) #+1 for time t
+        self.drift_fc1 = nn.Linear(state_dim, nhidden) #+1 for time t
         self.drift_fc2 = nn.Linear(nhidden, nhidden)
         self.drift_fc3 = nn.Linear(nhidden, state_dim)
 
-        self.diff_fc1 = nn.Linear(state_dim+1, nhidden) #+1 for time t
+        self.diff_fc1 = nn.Linear(state_dim, nhidden) #+1 for time t
         self.diff_fc2 = nn.Linear(nhidden, nhidden)
         self.diff_fc3 = nn.Linear(nhidden, state_dim)
 
@@ -381,29 +391,46 @@ class LatentNNKernelArmaSDEfunc(torch.nn.Module):
             nn.init.xavier_normal_(self.diff_fc1.weight, gain)
             nn.init.xavier_normal_(self.diff_fc2.weight, gain)
             nn.init.xavier_normal_(self.diff_fc3.weight, gain)
-            nn.init.xavier_normal_(self.ell_1_fc1.weight, gain)
-            nn.init.xavier_normal_(self.ell_1_fc2.weight, gain)
-            nn.init.xavier_normal_(self.ell_1_fc3.weight, gain)
-            nn.init.xavier_normal_(self.ell_2_fc1.weight, gain)
-            nn.init.xavier_normal_(self.ell_2_fc2.weight, gain)
-            nn.init.xavier_normal_(self.ell_2_fc3.weight, gain)
+            #nn.init.xavier_normal_(self.ell_1_fc1.weight, gain)
+            #nn.init.xavier_normal_(self.ell_1_fc2.weight, gain)
+            #nn.init.xavier_normal_(self.ell_1_fc3.weight, gain)
+            nn.init.constant_(self.ell_1_fc1.weight, 0.0)
+            nn.init.constant_(self.ell_1_fc2.weight, 0.0)
+            nn.init.constant_(self.ell_1_fc3.weight, 0.0)
+            nn.init.constant_(self.ell_1_fc1.bias, 0.0)
+            nn.init.constant_(self.ell_1_fc2.bias, 0.0)
+            nn.init.constant_(self.ell_1_fc3.bias, 0.0)
+            #nn.init.xavier_normal_(self.ell_2_fc1.weight, gain)
+            #nn.init.xavier_normal_(self.ell_2_fc2.weight, gain)
+            #nn.init.xavier_normal_(self.ell_2_fc3.weight, gain)
+            #Initialize the function ell_2 to zero; in other words, initialize it as a Brownian motion.
+            nn.init.constant_(self.ell_2_fc1.weight, 0.0)
+            nn.init.constant_(self.ell_2_fc2.weight, 0.0)
+            nn.init.constant_(self.ell_2_fc3.weight, 0.0)
+            nn.init.constant_(self.ell_2_fc1.bias, 0.0)
+            nn.init.constant_(self.ell_2_fc2.bias, 0.0)
+            nn.init.constant_(self.ell_2_fc3.bias, 0.0)
 
     # Drift
     def f(self, t, y):
-        t_input = t.expand(y.size(0), 1) #(batch_size, 1)
-        input = torch.cat([y[:, :state_dim], t_input], dim=1)
+        #t_input = t.expand(y.size(0), 1) #(batch_size, 1)
+        #input = torch.cat([y[:, :state_dim], t_input], dim=1)
 
-        out = self.act(self.drift_fc1(input))
+        #out = self.act(self.drift_fc1(input))
+        out = self.act(self.drift_fc1(y[:, :state_dim]))
         out = self.act(self.drift_fc2(out))
         out = self.drift_fc3(out)
+        #out = self.act(self.drift_fc3(out))
 
-        out2 = self.act(self.diff_fc1(input))
+        out2 = self.act(self.diff_fc1(y[:, :state_dim]))
         out2 = self.act(self.diff_fc2(out2))
         out2 = self.diff_fc3(out2)
+        #out2 = self.act(self.diff_fc3(out2))
 
         out3 = self.act(self.ell_1_fc1(t.unsqueeze(0)))
         out3 = self.act(self.ell_1_fc2(out3))
         out3 = self.act(self.ell_1_fc3(out3))
+        out3 = 10*out3
 
         dX1dt = out - out3 * out2 * y[:,state_dim:] #out2 * y[:,state_dim:] is Hadamard product
         dX2dt = torch.zeros_like(y[:,:1])
@@ -424,17 +451,19 @@ class LatentNNKernelArmaSDEfunc(torch.nn.Module):
         out4 = self.act(self.ell_2_fc1(t.unsqueeze(0)))
         out4 = self.act(self.ell_2_fc2(out4))
         out4 = self.act(self.ell_2_fc3(out4))
+        out4 = 10*out4
 
         dX2dw = out4.expand(batch_dim).reshape(batch_dim,-1) 
         #l_vals = torch.ones([]).expand(batch_dim).reshape(batch_dim,-1) 
         #print("1;{}".format(l_vals))
 
-        t_input = t.expand(y.size(0), 1) #(batch_size, 1)
-        input = torch.cat([y[:, :state_dim], t_input], dim=1)
+        #t_input = t.expand(y.size(0), 1) #(batch_size, 1)
+        #input = torch.cat([y[:, :state_dim], t_input], dim=1)
 
-        out = self.act(self.diff_fc1(input))
+        out = self.act(self.diff_fc1(y[:, :state_dim]))
         out = self.act(self.diff_fc2(out))
         out = self.diff_fc3(out)
+        #out = self.act(self.diff_fc3(out))
         dX1dw = out
 
         #print(torch.cat([dX1dw, dX2dw], dim=1).reshape(batch_dim,state_dim+1,-1).size())

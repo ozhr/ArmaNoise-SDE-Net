@@ -1,3 +1,12 @@
+## License
+
+This repository is released under the MIT License.
+
+It contains modified code from [original repository](https://github.com/KoheiHayashi0826/Fractional-SDE-Net)
+by **Kohei Hayashi**, used with permission.  
+Modifications and additions by **Hiromu Ozai (2025)**.
+
 # Arma-SDE-Net
+
 Code for a generative model using Arma-type Ito process.
-Ref: "Kohei Hayashi and Kei Nakagawa, fSDE-Net: Generation of Time Series Data with Long-term Memory"
+Ref: "Hiromu Ozai and Kei Nakagawa, NANSDE-Net: A Neural SDE Framework for Generating Time Series with Memory"
