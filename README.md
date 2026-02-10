@@ -9,4 +9,4 @@ Modifications and additions by **Hiromu Ozai (2025)**.
 # Arma-SDE-Net
 
 Code for a generative model using Arma-type Ito process.
-Ref: "Hiromu Ozai and Kei Nakagawa, NANSDE-Net: A Neural SDE Framework for Generating Time Series with Memory"
+Ref: "Hiromu Ozai and Kei Nakagawa, NANSDE-Net: A Neural SDE Framework for Generating Time Series with Memory" https://arxiv.org/abs/2602.08182
